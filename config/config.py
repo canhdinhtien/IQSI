@@ -17,6 +17,7 @@ def get_config():
     config.resume_from = ""
 
     config.use_lora = True
+    config.n_shot = 16
 
     config.pretrained = pretrained = ml_collections.ConfigDict()
     pretrained.model = "sd2-community/stable-diffusion-2-1"
@@ -26,4 +27,12 @@ def get_config():
     train.use_8bit_adam = False
     train.lr = 3e-4
     
+    config.path = path = ml_collections.ConfigDict()
+    path.real_train_dir = "real_data"
+    path.fewshot_dir = "real_data/train/dtd/fewshot_real_images"
+    path.synthesis_dir = "synthetic_data"
+
+
+    return config
+
     
