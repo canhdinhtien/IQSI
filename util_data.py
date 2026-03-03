@@ -338,7 +338,7 @@ SUBSET_NAMES = {
         'cautleya spicata', 'japanese anemone', 'black-eyed susan', 'silverbush', 'californian poppy',
         'osteospermum', 'spring crocus', 'bearded iris', 'windflower', 'tree poppy',
         'gazania', 'azalea', 'water lily', 'rose', 'thorn apple',
-        'morning glory', 'passion flower', 'lotus lotus', 'toad lily', 'anthurium',
+        'morning glory', 'passion flower', 'lotus', 'toad lily', 'anthurium',
         'frangipani', 'clematis', 'hibiscus', 'columbine', 'desert-rose',
         'tree mallow', 'magnolia', 'cyclamen', 'watercress', 'canna lily',
         'hippeastrum', 'bee balm', 'ball moss', 'foxglove', 'bougainvillea',
@@ -578,7 +578,6 @@ class Solarization(object):
             return ImageOps.solarize(img)
         else:
             return img
-
 
 
 
