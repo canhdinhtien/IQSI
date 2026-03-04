@@ -49,6 +49,11 @@ def get_config():
     train.lamda3 = 1
     train.lamda4 = 10
     train.lamda5 = 1
+    train.num_clusters = 47
+    train.update_centroids_freq = 5
+    train.gc_steps = 5
+    train.opt_steps = 10
+    train.prop_hard = 0.2
 
     config.path = path = ml_collections.ConfigDict()
     path.real_train_dir = "real_data"   
