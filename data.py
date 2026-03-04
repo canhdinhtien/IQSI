@@ -1,18 +1,12 @@
 import os
-from os.path import expanduser
 from os.path import join as ospj
 import json
-import pickle
-import numpy as np
 from PIL import Image
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from torch.utils.data import Dataset
 import torchvision as tv
 from collections import defaultdict
 
-from utils import make_dirs
 from util_data import (
     SUBSET_NAMES,
     configure_metadata, get_image_ids, get_class_labels,
@@ -25,7 +19,6 @@ CLIP_NORM_MEAN = (0.48145466, 0.4578275, 0.40821073)
 CLIP_NORM_STD = (0.26862954, 0.26130258, 0.27577711)
 
 def get_transforms(model_type):
-
     if model_type == "clip":
         norm_mean = CLIP_NORM_MEAN
         norm_std = CLIP_NORM_STD
@@ -144,21 +137,17 @@ class ImageNetDatasetFromMetadata(Dataset):
             image_id = self.image_ids[idx]
             image = self.get_data(ospj(self.data_root, image_id))
             image_label = self.image_labels[image_id]
-            image_path = self.image_paths[image_id]
         else: # few-shot
             image_id = self.image_paths[idx]
             image = self.get_data(self.image_paths[idx])
-            image_label = self.image_labels[idx]
-            image_path = self.image_paths[image_id]
         image = self.transform(image)
-        return image, image_label, image_path
+        return image, image_label
 
     def __len__(self):
         if not self.is_pooled_fewshot:
             return len(self.image_ids)
         else:
             return len(self.image_paths)
-
 
 class DatasetSynthImage(Dataset):
     def __init__(
@@ -233,6 +222,29 @@ class DatasetSynthImage(Dataset):
     def __len__(self):
         return len(self.image_paths)
 
+
+class DatasetWithPaths(torch.utils.data.Dataset):
+    def __init__(self, subset):
+        self.subset = subset
+        
+    def __getitem__(self, index):
+        x, y = self.subset[index]
+        
+        if hasattr(self.subset, '_image_files'):
+            path = str(self.subset._image_files[index])
+        elif hasattr(self.subset, '_images'):
+            path = str(self.subset._images[index])
+        elif hasattr(self.subset, 'samples'):
+            path = str(self.subset.samples[index][0])
+        elif hasattr(self.subset, 'data') and isinstance(self.subset.data, list):
+            path = str(self.subset.data[index])
+        else:
+            path = "unknown_path"
+            
+        return x, y, path
+
+    def __len__(self):
+        return len(self.subset)
 
 def filter_dset(dataset, n_img_per_cls, dataset_name):
     import random
@@ -610,12 +622,16 @@ def get_data_loader(
                                         dataset_name=dataset)
         else:
             raise ValueError("Please specify a valid dataset.")
+
+        train_dataset = DatasetWithPaths(train_dataset)
+
         train_loader = torch.utils.data.DataLoader(
             train_dataset, batch_size=bs, 
             sampler=None,
             shuffle=is_rand_aug,
             prefetch_factor=4, pin_memory=True,
-            num_workers=16)
+            num_workers=16
+        )
 
 #####################################################
 #####################################################
