@@ -144,12 +144,14 @@ class ImageNetDatasetFromMetadata(Dataset):
             image_id = self.image_ids[idx]
             image = self.get_data(ospj(self.data_root, image_id))
             image_label = self.image_labels[image_id]
+            image_path = self.image_paths[image_id]
         else: # few-shot
             image_id = self.image_paths[idx]
             image = self.get_data(self.image_paths[idx])
             image_label = self.image_labels[idx]
+            image_path = self.image_paths[image_id]
         image = self.transform(image)
-        return image, image_label
+        return image, image_label, image_path
 
     def __len__(self):
         if not self.is_pooled_fewshot:
@@ -217,6 +219,7 @@ class DatasetSynthImage(Dataset):
     def __getitem__(self, idx):
         image_path = self.image_paths[idx]
         image_label = self.image_labels[idx]
+        image_path = self.image_paths[idx]
         image = Image.open(image_path)
         image = image.convert('RGB')
         image = self.transform(image)
@@ -225,7 +228,7 @@ class DatasetSynthImage(Dataset):
         if self.is_pooled_fewshot:
             return image, image_label, is_real
         else:
-            return image, image_label
+            return image, image_label, image_path
 
     def __len__(self):
         return len(self.image_paths)
