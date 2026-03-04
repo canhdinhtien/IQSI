@@ -14,7 +14,7 @@ from accelerate import Accelerator
 from accelerate.utils import set_seed, ProjectConfiguration
 from accelerate.logging import get_logger
 
-from data import get_data_loader
+from data import get_data_loader, get_synth_train_data_loader
 
 from diffusers import StableDiffusionPipeline, DDIMScheduler
 from models import TinyDecoder, CLIP
@@ -69,7 +69,7 @@ def main():
         )
     logger.info(f"\n{config}")
 
-    train_loader, test_loader = get_data_loader(
+    real_train_loader, test_loader = get_data_loader(
         real_train_data_dir=config.path.real_train_dir,
         metadata_dir=config.path.metadata_dir,
         dataset=config.dataset_name,
@@ -77,6 +77,12 @@ def main():
         n_img_per_cls=config.n_shot,
         model_type=config.model_type,
         is_rand_aug=config.is_random_aug
+    )
+
+    synth_train_loader = get_synth_train_data_loader(
+        synth_train_data_dir=config.path.synthesis_dir
+        bs=config.train.batch_size,
+        is_rand_aug=config.train.is_rand_aug
     )
 
     pipeline = StableDiffusionPipeline.from_pretrained(
@@ -108,7 +114,7 @@ def main():
         tiny_decoder = TinyDecoder(in_ch=4, base_ch=128)
 
     model = CLIP(
-        dataset="dtd",
+        dataset=config.dataset_name,
         is_lora_image=config.classifier.is_lora_image,
         is_lora_text=config.classifier.is_lora_text,
         clip_download_dir=config.classifier.clip_download_dir,
@@ -135,3 +141,22 @@ def main():
         weight_decay=config.train.adam_weight_decay,
         eps=config.train.adam_epsilon,
     )
+
+    if config.resume_from:
+        logger.info(f"Resuming from {config.resume_from}")
+        accelerator.load_state(config.resume_from)
+        first_epoch = int(config.resume_from.split("_")[-1]) + 1
+    else:
+        first_epoch = 0
+
+    for epoch in range(first_epoch, config.train.num_epochs):
+        if epoch < config.train.num_epochs_warm_up:
+            for real_images, real_labels, _ in real_train_loader:
+                pass
+        else:
+            if epoch % 2 == 0:
+                pass
+            else:
+                pass
+if __name__ == "__main__":
+    app.run(main)
