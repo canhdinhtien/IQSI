@@ -32,21 +32,29 @@ def get_config():
     config.train = train = ml_collections.ConfigDict()
     train.batch_size = 32
     train.num_epochs = 100
+    train.num_epochs_warm_up = 20
     train.save_freq = 20
     train.num_checkpoint_limit = 5     
     train.use_8bit_adam = False
     train.lr = 1e-4
     train.is_rand_aug = True
+    train.target_label=None
+    train.n_img_per_cls=None
     train.adam_beta1 = 0.9
     train.adam_beta2 = 0.999      
     train.adam_weight_decay = 1e-2
     train.adam_epsilon = 1e-10 # Default is 1e-8
+    train.lamda1 = 10
+    train.lamda2 = 10
+    train.lamda3 = 1
+    train.lamda4 = 10
+    train.lamda5 = 1
 
     config.path = path = ml_collections.ConfigDict()
     path.real_train_dir = "real_data"   
     path.real_test_dir = "real_data"
-    path.metadata_dir = "metadata"      
-    path.fewshot_dir = "real_data/train/dtd/fewshot_real_images" 
+    path.metadata_dir = "metadata"    
+    path.fewshot_dir = "real_data/train/dtd/fewshot_real_images"
     path.synthesis_dir = "synthetic_data"
 
     return config
