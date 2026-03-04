@@ -1,7 +1,10 @@
+import gc
 import os
 from polars import datetime
 import tqdm
 import torch
+import contextlib
+import wandb
 
 from collections import defaultdict
 from functools import partial
@@ -18,7 +21,12 @@ from data import get_data_loader, get_synth_train_data_loader
 
 from diffusers import StableDiffusionPipeline, DDIMScheduler
 from models import TinyDecoder, CLIP
+from cluster import get_centroids_from_loader, assign_to_regions
+from data import get_transforms
 
+import torch.nn.functional as F
+
+from train import train_step
 tqdm = partial(tqdm.tqdm, dynamic_ncols=True) # fix tqdm not showing progress bar
 
 FLAGS = flags.FLAGS
@@ -79,11 +87,29 @@ def main():
         is_rand_aug=config.is_random_aug
     )
 
+    real_labels, test_loader = accelerator.prepare(real_train_loader, test_loader)
+
     synth_train_loader = get_synth_train_data_loader(
-        synth_train_data_dir=config.path.synthesis_dir
+        synth_train_data_dir=config.path.synthesis_dir,
         bs=config.train.batch_size,
-        is_rand_aug=config.train.is_rand_aug
+        is_rand_aug=config.train.is_rand_aug,
+        target_label=config.train.target_label,
+        n_img_per_cls=config.train.n_img_per_cls,
+        dataset=config.dataset_name,
+        n_shot=config.n_shot,
+        real_train_fewshot_data_dir=config.path.fewshot_dir,
+        is_pooled_fewshot=config.is_pooled_fewshot,
+        model_type=config.model_type
     )
+
+    synth_train_loader = accelerator.prepare(synth_train_loader)
+
+    def infinite_iterable(loader):
+        while True:
+            for batch in loader:
+                yield batch
+
+    synth_iter = iter(infinite_iterable(synth_train_loader))
 
     pipeline = StableDiffusionPipeline.from_pretrained(
         config.pretrained.model, revision=config.pretrained.revision
@@ -122,6 +148,8 @@ def main():
         precomputed_text_embs_path=config.classifier.precomputed_text_embs_path
     )
 
+    dtype_clip = model.clip.visual.conv1.weight.dtype
+
     if config.train.use_8bit_adam:
         try:
             import bitsandbytes as bnb
@@ -142,6 +170,8 @@ def main():
         eps=config.train.adam_epsilon,
     )
 
+    autocast = contextlib.nullcontext if config.use_lora else accelerator.autocast
+
     if config.resume_from:
         logger.info(f"Resuming from {config.resume_from}")
         accelerator.load_state(config.resume_from)
@@ -149,14 +179,58 @@ def main():
     else:
         first_epoch = 0
 
+    step = 0
+
+    all_real_paths = []
+    for batch in real_train_loader:
+        _, _, paths = batch 
+        all_real_paths.extend(paths)
+
+    _, clean_transform = get_transforms(config.model_type)
+    
+    centroids = get_centroids_from_loader(model, all_real_paths, config.train.nums_clusters, clean_transform, config.train.batch_size, accelerator, dtype_clip)
+    centroids_tensor = torch.from_numpy(centroids).to(accelerator.device)
+
     for epoch in range(first_epoch, config.train.num_epochs):
         if epoch < config.train.num_epochs_warm_up:
-            for real_images, real_labels, _ in real_train_loader:
-                pass
+            for real_batch in real_train_loader:
+                step += 1
+                
+                synth_batch = next(synth_iter)
+                
+                train_logs = train_step(
+                    model, real_batch, synth_batch, centroids_tensor, 
+                    optimizer, accelerator, config, dtype_clip, autocast
+                )
+                
+                if accelerator.is_main_process:
+                    wandb.log(train_logs, step=step)
+                    
+                if step % config.train.gc_steps == 0:
+                    gc.collect()
+                    torch.cuda.empty_cache()
+        elif epoch % 2 == 0:
+            pass
         else:
-            if epoch % 2 == 0:
-                pass
-            else:
-                pass
+            for real_batch in real_train_loader:
+                step += 1
+                
+                synth_batch = next(synth_iter)
+                
+                train_logs = train_step(
+                    model, real_batch, synth_batch, centroids_tensor, 
+                    optimizer, accelerator, config, dtype_clip, autocast
+                )
+                
+                if accelerator.is_main_process:
+                    wandb.log(train_logs, step=step)
+                
+                if step % config.train.gc_steps == 0:
+                    gc.collect()
+                    torch.cuda.empty_cache()
+        if (epoch + 1) % config.update_centroids_freq == 0:
+            centroids = get_centroids_from_loader(model, all_real_paths, config.train.nums_clusters, clean_transform, config.train.batch_size, accelerator, dtype_clip)
+            centroids_tensor = torch.from_numpy(centroids).to(accelerator.device)
+
 if __name__ == "__main__":
     app.run(main)
