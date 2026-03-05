@@ -3,6 +3,7 @@ import faiss
 import numpy as np
 from PIL import Image
 
+@torch.no_grad()
 def get_centroids_from_loader(model, paths, n_clusters, clean_transform, batch_size, accelerator, dtype_clip):
     all_embeddings = []
     
@@ -29,7 +30,7 @@ def get_centroids_from_loader(model, paths, n_clusters, clean_transform, batch_s
     all_embeddings = torch.cat(all_embeddings, dim=0).float().numpy()
     
     d_model = all_embeddings.shape[1]
-    kmeans = faiss.Kmeans(d_model, n_clusters, niter=20, verbose=True, gpu=True)
+    kmeans = faiss.Kmeans(d_model, n_clusters, niter=20, verbose=True, gpu=False)
     kmeans.train(all_embeddings)
 
     return kmeans.centroids
