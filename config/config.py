@@ -6,7 +6,7 @@ def get_config():
     config.run_name = ""                
     config.seed = 42
     config.logdir = "logs"
-    config.mixed_precision = "fp16"     # "no", "fp16", "bf16"
+    config.mixed_precision = "bf16"     # "no", "fp16", "bf16"
     config.allow_tf32 = True
     config.resume_from = ""             
     config.num_checkpoint_limit = 5
@@ -34,7 +34,7 @@ def get_config():
     unet.weight_lora = "pytorch_lora_weights.safetensors"
 
     config.train = train = ml_collections.ConfigDict()
-    train.real_batch_size = 64
+    train.real_batch_size = 32
     train.synth_batch_size = 64
     train.num_epochs = 100
     train.num_epochs_warm_up = 20
