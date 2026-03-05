@@ -65,6 +65,7 @@ def main(argv):
     )
 
     accelerator = Accelerator(
+        log_with="wandb",
         mixed_precision=config.mixed_precision,
         project_config=accelerator_config
     )
@@ -118,7 +119,7 @@ def main(argv):
         config.pretrained.model, revision=config.pretrained.revision
     )
 
-    pipeline.load_lora_weights("/", weight_name=config.unet.weight_lora)
+    pipeline.load_lora_weights(".", weight_name=config.unet.weight_lora)
     pipeline.fuse_lora(lora_scale=1.0)
     pipeline.unload_lora_weights()
 
@@ -155,6 +156,8 @@ def main(argv):
         precomputed_text_embs_path=config.classifier.precomputed_text_embs_path
     )
 
+    model = accelerator.prepare(model)
+
     dtype_clip = model.clip.visual.conv1.weight.dtype
 
     if config.train.use_8bit_adam:
@@ -171,13 +174,13 @@ def main(argv):
 
     optimizer = optimizer_cls(
         model.learnable_params(),
-        lr=config.train.learning_rate,
+        lr=config.train.lr,
         betas=(config.train.adam_beta1, config.train.adam_beta2),
         weight_decay=config.train.adam_weight_decay,
         eps=config.train.adam_epsilon,
     )
 
-    autocast = contextlib.nullcontext if config.use_lora else accelerator.autocast
+    autocast = contextlib.nullcontext() if config.use_lora else accelerator.autocast()
 
     if config.resume_from:
         logger.info(f"Resuming from {config.resume_from}")
@@ -195,7 +198,7 @@ def main(argv):
 
     _, clean_transform = get_transforms(config.model_type)
     
-    centroids = get_centroids_from_loader(model, all_real_paths, config.train.nums_clusters, clean_transform, config.train.batch_size, accelerator, dtype_clip)
+    centroids = get_centroids_from_loader(model, all_real_paths, config.train.num_clusters, clean_transform, config.train.real_batch_size, accelerator, dtype_clip)
     centroids_tensor = torch.from_numpy(centroids).to(accelerator.device)
 
     for epoch in range(first_epoch, config.train.num_epochs):
@@ -211,7 +214,7 @@ def main(argv):
                 )
                 
                 if accelerator.is_main_process:
-                    wandb.log(train_logs, step=step)
+                    accelerator.log(train_logs, step=step)
                     
                 if step % config.train.gc_steps == 0:
                     gc.collect()
@@ -226,8 +229,8 @@ def main(argv):
                     optimizer, accelerator, config, dtype_clip, autocast, config.train.prop_hard, classes
                 )
                 
-                if accelerator.is_main_progress:
-                    wandb.log(train_logs, step=step)
+                if accelerator.is_main_process:
+                    accelerator.log(train_logs, step=step)
 
                 if step % config.gc_steps == 0:
                     gc.collect()
@@ -244,13 +247,13 @@ def main(argv):
                 )
                 
                 if accelerator.is_main_process:
-                    wandb.log(train_logs, step=step)
+                    accelerator.log(train_logs, step=step)
                 
                 if step % config.train.gc_steps == 0:
                     gc.collect()
                     torch.cuda.empty_cache()
-        if (epoch + 1) % config.update_centroids_freq == 0:
-            centroids = get_centroids_from_loader(model, all_real_paths, config.train.nums_clusters, clean_transform, config.train.batch_size, accelerator, dtype_clip)
+        if (epoch + 1) % config.train.update_centroids_freq == 0:
+            centroids = get_centroids_from_loader(model, all_real_paths, config.train.num_clusters, clean_transform, config.train._real_batch_size, accelerator, dtype_clip)
             centroids_tensor = torch.from_numpy(centroids).to(accelerator.device)
 
 if __name__ == "__main__":
