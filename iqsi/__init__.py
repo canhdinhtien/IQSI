@@ -1,1 +1,1 @@
-from .train import train_step
+from .train import train_step, train_step_with_hard_samples
