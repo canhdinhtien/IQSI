@@ -223,13 +223,42 @@ class DatasetSynthImage(Dataset):
         return len(self.image_paths)
 
 
+# class DatasetWithPaths(torch.utils.data.Dataset):
+#     def __init__(self, subset):
+#         self.subset = subset
+        
+#     def __getitem__(self, index):
+#         x, y = self.subset[index]
+        
+#         if hasattr(self.subset, '_image_files'):
+#             path = str(self.subset._image_files[index])
+#         elif hasattr(self.subset, '_images'):
+#             path = str(self.subset._images[index])
+#         elif hasattr(self.subset, 'samples'):
+#             path = str(self.subset.samples[index][0])
+#         elif hasattr(self.subset, 'data') and isinstance(self.subset.data, list):
+#             path = str(self.subset.data[index])
+#         else:
+#             path = "unknown_path"
+            
+#         return x, y, path
+
+#     def __len__(self):
+#         return len(self.subset)
+
 class DatasetWithPaths(torch.utils.data.Dataset):
     def __init__(self, subset):
         self.subset = subset
         
+        # forward attributes nếu subset có
+        if hasattr(subset, "classes"):
+            self.classes = subset.classes
+        if hasattr(subset, "class_to_idx"):
+            self.class_to_idx = subset.class_to_idx
+
     def __getitem__(self, index):
         x, y = self.subset[index]
-        
+
         if hasattr(self.subset, '_image_files'):
             path = str(self.subset._image_files[index])
         elif hasattr(self.subset, '_images'):
@@ -240,7 +269,7 @@ class DatasetWithPaths(torch.utils.data.Dataset):
             path = str(self.subset.data[index])
         else:
             path = "unknown_path"
-            
+
         return x, y, path
 
     def __len__(self):
