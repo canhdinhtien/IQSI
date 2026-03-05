@@ -1,6 +1,6 @@
 import gc
 import os
-from polars import datetime
+import datetime
 import tqdm
 import torch
 import contextlib
@@ -26,7 +26,7 @@ from data import get_transforms
 
 import torch.nn.functional as F
 
-from train import train_step, train_step_with_hard_samples
+from iqsi import train_step, train_step_with_hard_samples
 tqdm = partial(tqdm.tqdm, dynamic_ncols=True)
 
 FLAGS = flags.FLAGS
@@ -34,10 +34,10 @@ config_flags.DEFINE_config_file("config", "config/config.py", "Training configur
 
 logger = get_logger(__name__)
 
-def main():
+def main(argv):
+    del argv
     config = FLAGS.config
-    set_seed(config.seed, device_specific=True)
-
+    
     unique_id = datetime.datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
     if not config.run_name:
         config.run_name = unique_id
@@ -68,6 +68,8 @@ def main():
         mixed_precision=config.mixed_precision,
         project_config=accelerator_config
     )
+
+    set_seed(config.seed, device_specific=True)
 
     if accelerator.is_main_process:
         accelerator.init_trackers(
@@ -221,7 +223,7 @@ def main():
 
                 train_logs = train_step_with_hard_samples(
                     model, pipeline, real_batch, synth_batch, centroids_tensor, 
-                    optimizer, accelerator, config, dtype_clip, autocast, config.train.prop_hard
+                    optimizer, accelerator, config, dtype_clip, autocast, config.train.prop_hard, classes
                 )
                 
                 if accelerator.is_main_progress:
