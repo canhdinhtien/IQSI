@@ -20,13 +20,13 @@ from accelerate.logging import get_logger
 from data import get_data_loader, get_synth_train_data_loader
 
 from diffusers import StableDiffusionPipeline, DDIMScheduler
-from models import TinyDecoder, CLIP, evaluate
+from models import TinyDecoder, CLIP
 from cluster import get_centroids_from_loader
 from data import get_transforms
 
 import torch.nn.functional as F
 
-from iqsi import train_step, train_step_with_hard_samples
+from iqsi import train_step, train_step_with_hard_samples, evaluate
 tqdm = partial(tqdm.tqdm, dynamic_ncols=True)
 
 FLAGS = flags.FLAGS
