@@ -4,7 +4,7 @@ from torch.utils.checkpoint import checkpoint
 from PIL import Image
 import torchvision.transforms.functional as TF
 import random
-from torch.transform import v2
+from torchvision.transforms import v2
 
 REALISTIC_STYLE_POOL = [
     "sunlight, hard shadows, high contrast, outdoor photography",
@@ -29,7 +29,6 @@ def gen_hard_samples(
     classes,
     config, 
     accelerator, 
-    opt_steps,
     centroids_tensor
 ):
     device = accelerator.device
@@ -81,7 +80,7 @@ def gen_hard_samples(
 
     final_images = None
     
-    for k in range(opt_steps):
+    for k in range(config.train.opt_steps):
         latents_t = latents_t.detach().requires_grad_(True)
         
         with torch.autocast("cuda", dtype=torch.float16):
@@ -130,7 +129,7 @@ def gen_hard_samples(
             latents_t -= alpha * latents_t.grad
             latents_t.grad.zero_()
 
-        if k == opt_steps - 1:
+        if k == config.train.opt_steps - 1:
             final_images = images.detach().clone()
 
     return final_images
