@@ -259,11 +259,11 @@ def main(argv):
         accelerator.log({
             "eval/test_accuracy": test_acc,
             "eval/train accuracy": train_acc
-        }, step=epoch)
+        }, step=step)
 
         if (epoch + 1) % config.train.update_centroids_freq == 0:
             centroids = get_centroids_from_loader(model, all_real_paths, config.train.num_clusters, clean_transform, config.train.real_batch_size, accelerator, dtype_clip)
             centroids_tensor = torch.from_numpy(centroids).to(accelerator.device)
-
+        model.train()
 if __name__ == "__main__":
     app.run(main)
