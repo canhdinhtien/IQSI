@@ -20,7 +20,7 @@ from accelerate.logging import get_logger
 from data import get_data_loader, get_synth_train_data_loader
 
 from diffusers import StableDiffusionPipeline, DDIMScheduler
-from models import TinyDecoder, CLIP
+from models import TinyDecoder, CLIP, evaluate
 from cluster import get_centroids_from_loader
 from data import get_transforms
 
@@ -252,6 +252,15 @@ def main(argv):
                 if step % config.train.gc_steps == 0:
                     gc.collect()
                     torch.cuda.empty_cache()
+        
+        test_acc = evaluate(model, test_loader, accelerator)
+        train_acc = evaluate(model, real_train_loader, accelerator)
+
+        accelerator.log({
+            "eval/test_accuracy": test_acc,
+            "eval/train accuracy": train_acc
+        }, step=epoch)
+
         if (epoch + 1) % config.train.update_centroids_freq == 0:
             centroids = get_centroids_from_loader(model, all_real_paths, config.train.num_clusters, clean_transform, config.train.real_batch_size, accelerator, dtype_clip)
             centroids_tensor = torch.from_numpy(centroids).to(accelerator.device)
