@@ -99,48 +99,71 @@ def train_transform_tensor(image_batch):
     
     return augmentor(image_batch)
 
+def denormalize_clip(tensor):
+    mean = torch.tensor([0.48145466, 0.4578275, 0.40821073]).to(tensor.device).view(1, 3, 1, 1)
+    std = torch.tensor([0.26862954, 0.26130258, 0.27577711]).to(tensor.device).view(1, 3, 1, 1)
+    
+    res = (tensor * std) + mean
+    return torch.clamp(res, 0, 1)
+
 def train_step_with_hard_samples(
     model, 
     pipe, 
     real_batch, 
-    synth_batch, 
-    synth_rand_batch, 
+    synth_batch,
     centroids_tensor, 
     optimizer, 
     accelerator, 
     config, 
     dtype_clip, 
-    autocast_context
+    autocast_context,
+    hard_ratio
 ):
     model.train()
     
     real_images, real_labels, _ = real_batch
     synth_images, synth_labels, _ = synth_batch
-    _, rand_labels, rand_paths = synth_rand_batch
+
+    bs = synth_images.shape[0]
+    num_hard = int(bs * hard_ratio)
+
+    perm = torch.randperm(bs)
+    hard_indices = perm[:num_hard]
+    
+    images_to_transform = synth_images[hard_indices].to(accelerator.device)
+    images_01 = denormalize_clip(images_to_transform)
     
     hard_samples = gen_hard_samples(
-        model, pipe, rand_labels.to(accelerator.device), rand_paths, 
-        config, accelerator, dtype_clip, opt_steps=config.train.opt_steps
+        model, 
+        pipe, 
+        synth_labels[hard_indices].to(accelerator.device), 
+        images_01,
+        config, 
+        accelerator, 
+        dtype_clip, 
+        opt_steps=config.train.opt_steps
     )
     
     hard_samples_aug = train_transform_tensor(hard_samples).to(accelerator.device, dtype=dtype_clip)
+    
+    updated_synth_images = synth_images.clone().to(accelerator.device, dtype=dtype_clip)
+    updated_synth_images[hard_indices] = hard_samples_aug
 
     TS = {i: [[], []] for i in range(config.train.num_clusters)}
 
-    with autocast_context():
+    with autocast_context:
         real_images = real_images.to(accelerator.device, dtype=dtype_clip)
         real_labels = real_labels.to(accelerator.device)
-        
-        all_synth_images = torch.cat([synth_images.to(accelerator.device), hard_samples_aug], dim=0)
-        all_synth_labels = torch.cat([synth_labels.to(accelerator.device), rand_labels.to(accelerator.device)], dim=0)
+        synth_labels = synth_labels.to(accelerator.device)
+
         real_out = model(real_images, output_features=True)
-        synth_out = model(all_synth_images, output_features=True)
+        synth_out = model(updated_synth_images, output_features=True)
         
         real_logits, real_feats = real_out["logits"], real_out["image_feats"]
         synth_logits, synth_feats = synth_out["logits"], synth_out["image_feats"]
 
         L_real_vector = F.cross_entropy(real_logits, real_labels, reduction="none")
-        L_synth_vector = F.cross_entropy(synth_logits, all_synth_labels, reduction="none")
+        L_synth_vector = F.cross_entropy(synth_logits, synth_labels, reduction="none")
         
         real_loss = L_real_vector.mean()
         synth_loss = L_synth_vector.mean()
