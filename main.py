@@ -5,6 +5,7 @@ import tqdm
 import torch
 import contextlib
 import wandb
+import torchvision
 
 from collections import defaultdict
 from functools import partial
@@ -115,8 +116,17 @@ def main(argv):
 
     synth_iter = iter(infinite_iterable(synth_train_loader))
 
+    inference_dtype = torch.float32
+    if accelerator.mixed_precision == "fp16":
+        inference_dtype = torch.float16
+    elif accelerator.mixed_precision == "bf16":
+        inference_dtype = torch.bfloat16
+    
     pipeline = StableDiffusionPipeline.from_pretrained(
-        config.pretrained.model, revision=config.pretrained.revision
+        config.pretrained.model, 
+        revision=config.pretrained.revision, 
+        torch_dtype=inference_dtype,
+        use_safetensors=True
     )
 
     pipeline.load_lora_weights(".", weight_name=config.unet.weight_lora)
@@ -129,14 +139,11 @@ def main(argv):
 
     pipeline.scheduler = DDIMScheduler.from_config(pipeline.scheduler.config)
 
-    inference_dtype = torch.float32
-    if accelerator.mixed_precision == "fp16":
-        inference_dtype = torch.float16
-    elif accelerator.mixed_precision == "bf16":
-        inference_dtype = torch.bfloat16
-
-    pipeline.vae.to(accelerator.device, dtype=inference_dtype)
-    pipeline.text_encoder.to(accelerator.device, dtype=inference_dtype)
+    pipeline.vae.enable_tiling() 
+    pipeline.vae.enable_slicing()
+    
+    pipeline.to(accelerator.device)
+    
     if config.use_lora:
         pipeline.unet.to(accelerator.device, dtype=inference_dtype)
 
@@ -224,15 +231,20 @@ def main(argv):
                 step += 1
                 synth_batch = next(synth_iter)
 
-                train_logs = train_step_with_hard_samples(
+                train_logs, orig_imgs, hard_imgs = train_step_with_hard_samples(
                     model, pipeline, real_batch, synth_batch, centroids_tensor, 
                     optimizer, accelerator, config, dtype_clip, autocast, config.train.prop_hard, classes
                 )
                 
                 if accelerator.is_main_process:
                     accelerator.log(train_logs, step=step)
+                    comparison = torch.cat([orig_imgs.detach().cpu(), hard_imgs.detach().cpu()], dim=0)
+                    grid = torchvision.utils.make_grid(comparison, nrow=orig_imgs.shape[0], normalize=True)
 
-                if step % config.gc_steps == 0:
+                    accelerator.log({
+                        "visuals/hard_samples_comparison": wandb.Image(grid, caption=f"Step {step}: Top (Orig) vs Bottom (Hard)")
+                    }, step=step)
+                if step % config.train.gc_steps == 0:
                     gc.collect()
                     torch.cuda.empty_cache()
         else:
