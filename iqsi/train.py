@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-import gen_hard_samples
+from .gen_hard_sample import gen_hard_samples
 from torchvision.transforms import v2
 
 def train_step(
@@ -117,7 +117,8 @@ def train_step_with_hard_samples(
     config, 
     dtype_clip, 
     autocast_context,
-    hard_ratio
+    hard_ratio,
+    classes
 ):
     model.train()
     
@@ -136,12 +137,14 @@ def train_step_with_hard_samples(
     hard_samples = gen_hard_samples(
         model, 
         pipe, 
-        synth_labels[hard_indices].to(accelerator.device), 
         images_01,
+        synth_labels[hard_indices].to(accelerator.device), 
+        real_images,
+        real_labels,
+        classes,
         config, 
         accelerator, 
-        dtype_clip, 
-        opt_steps=config.train.opt_steps
+        centroids_tensor
     )
     
     hard_samples_aug = train_transform_tensor(hard_samples).to(accelerator.device, dtype=dtype_clip)
