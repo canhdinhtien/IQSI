@@ -29,8 +29,12 @@ def get_config():
     classifier.clip_version = "ViT-B/16"
     classifier.precomputed_text_embs_path = "weights\dtd_text_emb.pt"
 
+    config.unet = unet = ml_collections.ConfigDict()
+    unet.weight_lora = "pytorch_lora_weights.safetensors"
+
     config.train = train = ml_collections.ConfigDict()
-    train.batch_size = 32
+    train.real_batch_size = 64
+    train.synth_batch_size = 64
     train.num_epochs = 100
     train.num_epochs_warm_up = 20
     train.save_freq = 20
@@ -53,7 +57,8 @@ def get_config():
     train.update_centroids_freq = 5
     train.gc_steps = 5
     train.opt_steps = 10
-    train.prop_hard = 0.2
+    train.prop_hard = 0.4
+    
 
     config.path = path = ml_collections.ConfigDict()
     path.real_train_dir = "real_data"   
