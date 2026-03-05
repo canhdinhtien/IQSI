@@ -133,7 +133,7 @@ def train_step_with_hard_samples(
     
     images_to_transform = synth_images[hard_indices].to(accelerator.device)
     images_01 = denormalize_clip(images_to_transform)
-    
+    original_samples = images_01.detach().clone()
     hard_samples = gen_hard_samples(
         model, 
         pipe, 
@@ -213,4 +213,4 @@ def train_step_with_hard_samples(
         "loss/eps_GS": eps_GS.item(),
         "loss/eps_GZ": eps_GZ.item(),
         "stats/active_clusters": sum(1 for i in range(config.train.num_clusters) if len(TS[i][1]) > 0)
-    }
+    }, original_samples, hard_samples
