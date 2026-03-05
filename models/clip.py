@@ -205,7 +205,7 @@ import torch.nn as nn
 import clip
 from timm.models._manipulate import checkpoint_seq
 
-from lora import lora_replace_attention_layers
+from .lora import lora_replace_attention_layers
 from util_data import SUBSET_NAMES, TEMPLATES_SMALL
 
 def get_dataset_name_for_template(dataset):
