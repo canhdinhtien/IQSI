@@ -21,13 +21,13 @@ from data import get_data_loader, get_synth_train_data_loader
 
 from diffusers import StableDiffusionPipeline, DDIMScheduler
 from models import TinyDecoder, CLIP
-from cluster import get_centroids_from_loader, assign_to_regions
+from cluster import get_centroids_from_loader
 from data import get_transforms
 
 import torch.nn.functional as F
 
-from train import train_step
-tqdm = partial(tqdm.tqdm, dynamic_ncols=True) # fix tqdm not showing progress bar
+from train import train_step, train_step_with_hard_samples
+tqdm = partial(tqdm.tqdm, dynamic_ncols=True)
 
 FLAGS = flags.FLAGS
 config_flags.DEFINE_config_file("config", "config/config.py", "Training configuration.")
@@ -71,7 +71,7 @@ def main():
 
     if accelerator.is_main_process:
         accelerator.init_trackers(
-            project_name="ddpo-pytorch",
+            project_name="IQSI",
             config=config.to_dict(),
             init_kwargs={"wandb": {"name": config.run_name}},
         )
@@ -81,17 +81,18 @@ def main():
         real_train_data_dir=config.path.real_train_dir,
         metadata_dir=config.path.metadata_dir,
         dataset=config.dataset_name,
-        bs=config.train.batch_size,
+        bs=config.train.real_batch_size,
         n_img_per_cls=config.n_shot,
         model_type=config.model_type,
         is_rand_aug=config.is_random_aug
     )
 
-    real_labels, test_loader = accelerator.prepare(real_train_loader, test_loader)
+    classes = real_train_loader.dataset.classes
+    real_train_loader, test_loader = accelerator.prepare(real_train_loader, test_loader)
 
     synth_train_loader = get_synth_train_data_loader(
         synth_train_data_dir=config.path.synthesis_dir,
-        bs=config.train.batch_size,
+        bs=config.train.synth_batch_size,
         is_rand_aug=config.train.is_rand_aug,
         target_label=config.train.target_label,
         n_img_per_cls=config.train.n_img_per_cls,
@@ -114,6 +115,10 @@ def main():
     pipeline = StableDiffusionPipeline.from_pretrained(
         config.pretrained.model, revision=config.pretrained.revision
     )
+
+    pipeline.load_lora_weights("/", weight_name=config.unet.weight_lora)
+    pipeline.fuse_lora(lora_scale=1.0)
+    pipeline.unload_lora_weights()
 
     pipeline.vae.requires_grad_(False)
     pipeline.text_encoder.requires_grad_(False)
@@ -210,7 +215,21 @@ def main():
                     gc.collect()
                     torch.cuda.empty_cache()
         elif epoch % 2 == 0:
-            pass
+            for real_batch in real_train_loader:
+                step += 1
+                synth_batch = next(synth_iter)
+
+                train_logs = train_step_with_hard_samples(
+                    model, pipeline, real_batch, synth_batch, centroids_tensor, 
+                    optimizer, accelerator, config, dtype_clip, autocast, config.train.prop_hard
+                )
+                
+                if accelerator.is_main_progress:
+                    wandb.log(train_logs, step=step)
+
+                if step % config.gc_steps == 0:
+                    gc.collect()
+                    torch.cuda.empty_cache()
         else:
             for real_batch in real_train_loader:
                 step += 1
