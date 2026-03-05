@@ -9,14 +9,15 @@ def get_config():
     config.mixed_precision = "fp16"     # "no", "fp16", "bf16"
     config.allow_tf32 = True
     config.resume_from = ""             
-
+    config.num_checkpoint_limit = 5
     config.dataset_name = "dtd"         
     config.n_shot = 16                  
     config.is_synth_train = False       
     config.is_pooled_fewshot = False    
     config.model_type = "clip"
     config.use_lora = True
-
+    config.is_random_aug = False
+    
     config.pretrained = pretrained = ml_collections.ConfigDict()
     pretrained.model = "sd2-community/stable-diffusion-2-1"
     pretrained.revision = "main"
@@ -27,7 +28,7 @@ def get_config():
     classifier.is_lora_text = False
     classifier.clip_download_dir = "model_clip"
     classifier.clip_version = "ViT-B/16"
-    classifier.precomputed_text_embs_path = "weights\dtd_text_emb.pt"
+    classifier.precomputed_text_embs_path = "weights/dtd_text_emb.pt"
 
     config.unet = unet = ml_collections.ConfigDict()
     unet.weight_lora = "pytorch_lora_weights.safetensors"
@@ -58,7 +59,7 @@ def get_config():
     train.gc_steps = 5
     train.opt_steps = 10
     train.prop_hard = 0.4
-    
+
 
     config.path = path = ml_collections.ConfigDict()
     path.real_train_dir = "real_data"   
