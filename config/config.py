@@ -17,7 +17,8 @@ def get_config():
     config.model_type = "clip"
     config.use_lora = True
     config.is_random_aug = False
-    
+    config.log_with = "wandb"
+
     config.pretrained = pretrained = ml_collections.ConfigDict()
     pretrained.model = "sd2-community/stable-diffusion-2-1"
     pretrained.revision = "main"
@@ -59,7 +60,8 @@ def get_config():
     train.gc_steps = 5
     train.opt_steps = 10
     train.prop_hard = 0.4
-
+    train.save_hard_images_freq = 24
+    train.save_hard_images = True
 
     config.path = path = ml_collections.ConfigDict()
     path.real_train_dir = "real_data"   

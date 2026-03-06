@@ -66,7 +66,7 @@ def main(argv):
     )
 
     accelerator = Accelerator(
-        log_with="wandb",
+        log_with=config.log_with,
         mixed_precision=config.mixed_precision,
         project_config=accelerator_config
     )
@@ -74,10 +74,14 @@ def main(argv):
     set_seed(config.seed, device_specific=True)
 
     if accelerator.is_main_process:
+        init_kwargs = {}
+        if config.log_with == "wandb":
+            init_kwargs["wandb"] = {"name": config.run_name}
+
         accelerator.init_trackers(
             project_name="IQSI",
             config=config.to_dict(),
-            init_kwargs={"wandb": {"name": config.run_name}},
+            init_kwargs=init_kwargs,
         )
     logger.info(f"\n{config}")
 
@@ -238,12 +242,13 @@ def main(argv):
                 
                 if accelerator.is_main_process:
                     accelerator.log(train_logs, step=step)
-                    comparison = torch.cat([orig_imgs.detach().cpu(), hard_imgs.detach().cpu()], dim=0)
-                    grid = torchvision.utils.make_grid(comparison, nrow=orig_imgs.shape[0], normalize=True)
+                    if config.log_with == "wandb" and config.train.save_hard_images and step % config.train.save_hard_images_freq == 0:
+                        comparison = torch.cat([orig_imgs.detach().cpu(), hard_imgs.detach().cpu()], dim=0)
+                        grid = torchvision.utils.make_grid(comparison, nrow=orig_imgs.shape[0], normalize=True)
 
-                    accelerator.log({
-                        "visuals/hard_samples_comparison": wandb.Image(grid, caption=f"Step {step}: Top (Orig) vs Bottom (Hard)")
-                    }, step=step)
+                        accelerator.log({
+                            "visuals/hard_samples_comparison": wandb.Image(grid, caption=f"Step {step}: Top (Orig) vs Bottom (Hard)")
+                        }, step=step)
                 if step % config.train.gc_steps == 0:
                     gc.collect()
                     torch.cuda.empty_cache()
