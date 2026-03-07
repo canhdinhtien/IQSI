@@ -37,6 +37,10 @@ def train_step(
         real_loss = L_real_vector.mean()
         synth_loss = L_synth_vector.mean()
 
+        real_feats = F.normalize(real_feats.float(), p=2, dim=1)
+        synth_feats = F.normalize(synth_feats.float(), p=2, dim=1)
+        centroids_tensor = F.normalize(centroids_tensor.float(), p=2, dim=1)
+
         with torch.no_grad():
             dists_real = torch.cdist(real_feats.float(), centroids_tensor.float())
             real_regions = torch.argmin(dists_real, dim=1)
@@ -170,6 +174,10 @@ def train_step_with_hard_samples(
         
         real_loss = L_real_vector.mean()
         synth_loss = L_synth_vector.mean()
+
+        real_feats = F.normalize(real_feats.float(), p=2, dim=1)
+        synth_feats = F.normalize(synth_feats.float(), p=2, dim=1)
+        centroids_tensor = F.normalize(centroids_tensor.float(), p=2, dim=1)
 
         with torch.no_grad():
             real_regions = torch.argmin(torch.cdist(real_feats.float(), centroids_tensor.float()), dim=1)

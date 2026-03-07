@@ -79,6 +79,18 @@ def gen_hard_samples(
     torch.cuda.empty_cache()
 
     final_images = None
+
+    with torch.no_grad():
+        real_out = model(real_images, output_features=True)
+        L_real_vec = F.cross_entropy(real_out["logits"], real_labels, reduction="none")
+        real_feats = real_out["image_feats"]
+        real_feats = F.normalize(real_feats.float(), p=2, dim=1)
+
+        centroids_tensor = F.normalize(centroids_tensor.float(), p=2, dim=1)
+
+    dists_real = torch.cdist(real_feats.float(), centroids_tensor.float())
+    real_regions = torch.argmin(dists_real, dim=1)
+
     for k in range(config.train.opt_steps):
         latents_t = latents_t.detach().clone().requires_grad_(True)
         
@@ -92,18 +104,14 @@ def gen_hard_samples(
         out = model(images_trans, output_features=True)
         synth_logits, synth_feats = out["logits"], out["image_feats"]
         
-        with torch.no_grad():
-            real_out = model(real_images, output_features=True)
-            L_real_vec = F.cross_entropy(real_out["logits"], real_labels, reduction="none")
-            real_feats = real_out["image_feats"]
+        synth_feats = F.normalize(synth_feats.float(), p=2, dim=1)
 
         L_synth_vec = F.cross_entropy(synth_logits, synth_labels, reduction="none")
         synth_loss = L_synth_vec.mean()
 
         eps_GS = torch.tensor(0.0, device=device)
         g = 0
-        dists_real = torch.cdist(real_feats.float(), centroids_tensor.float())
-        real_regions = torch.argmin(dists_real, dim=1)
+        
         dists_synth = torch.cdist(synth_feats.float(), centroids_tensor.float())
         synth_regions = torch.argmin(dists_synth, dim=1)
 
