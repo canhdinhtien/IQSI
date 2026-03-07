@@ -248,9 +248,7 @@ class DatasetWithPaths(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.subset)
 
-def filter_dset(dataset, n_img_per_cls, dataset_name, seed=42):
-    random.seed(seed)
-    np.random.seed(seed)
+def filter_dset(dataset, n_img_per_cls, dataset_name):
     print(n_img_per_cls)
     if dataset_name == 'pets':
         _images = dataset._images
