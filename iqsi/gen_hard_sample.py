@@ -1,6 +1,5 @@
 import torch
 import torch.nn.functional as F
-import random
 from torchvision.transforms import v2
 import gc
 
@@ -33,6 +32,7 @@ def gen_hard_samples(
     vae_dtype = pipe.vae.dtype 
     unet_dtype = pipe.unet.dtype
     alpha = 0.01
+    generator = torch.Generator(device=device).manual_seed(config.seed)
 
     with torch.no_grad():
         synth_images_vae = F.interpolate(synth_images_01, size=target_size, mode='bilinear')
@@ -42,7 +42,8 @@ def gen_hard_samples(
         latents = latents.to(dtype=unet_dtype)
 
         synth_classes = [classes[i.item()] for i in synth_labels]
-        selected_style = random.choice(REALISTIC_STYLE_POOL)
+        style_idx = torch.randint(0, len(REALISTIC_STYLE_POOL), (1,), generator=generator).item()
+        selected_style = REALISTIC_STYLE_POOL[style_idx]
         prompts = [f"texture of {c}, {selected_style}, organic, natural texture" for c in synth_classes]
         neg_prompts = ["ugly, blur, painting, drawing"] * len(synth_classes)
 
@@ -58,7 +59,7 @@ def gen_hard_samples(
         init_timestep = int(num_inference_steps * noise_strength)
         t_start = pipe.scheduler.timesteps[num_inference_steps - init_timestep]
         
-        noise = torch.randn_like(latents)
+        noise = torch.randn(latents.shape, generator=generator, device=device, dtype=latents.dtype)
         latents_t = pipe.scheduler.add_noise(latents, noise, torch.tensor([t_start], device=device))
 
         steps_to_run = pipe.scheduler.timesteps[num_inference_steps - init_timestep:]

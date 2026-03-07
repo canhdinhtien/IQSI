@@ -6,7 +6,7 @@ import torch
 from torch.utils.data import Dataset
 import torchvision as tv
 from collections import defaultdict
-
+import random
 from util_data import (
     SUBSET_NAMES,
     configure_metadata, get_image_ids, get_class_labels,
@@ -113,8 +113,7 @@ class ImageNetDatasetFromMetadata(Dataset):
             self.image_labels = []
             reps = round(n_img_per_cls // n_shot)
             for label, class_name in enumerate(SUBSET_NAMES[dataset]):
-                real_img_paths = os.listdir(
-                    ospj(real_train_fewshot_data_dir, class_name))
+                real_img_paths = sorted(os.listdir(ospj(real_train_fewshot_data_dir, class_name)))
                 real_subset = [
                     ospj(
                         real_train_fewshot_data_dir, 
@@ -192,8 +191,7 @@ class DatasetSynthImage(Dataset):
                 n_shot = 16
             reps = round(n_img_per_cls // n_shot)
             for label, class_name in enumerate(SUBSET_NAMES[dataset]):
-                real_img_paths = os.listdir(
-                    ospj(real_train_fewshot_data_dir, class_name))
+                real_img_paths = sorted(os.listdir(ospj(real_train_fewshot_data_dir, class_name)))
                 real_subset = [
                     ospj(
                         real_train_fewshot_data_dir, 
@@ -222,35 +220,10 @@ class DatasetSynthImage(Dataset):
     def __len__(self):
         return len(self.image_paths)
 
-
-# class DatasetWithPaths(torch.utils.data.Dataset):
-#     def __init__(self, subset):
-#         self.subset = subset
-        
-#     def __getitem__(self, index):
-#         x, y = self.subset[index]
-        
-#         if hasattr(self.subset, '_image_files'):
-#             path = str(self.subset._image_files[index])
-#         elif hasattr(self.subset, '_images'):
-#             path = str(self.subset._images[index])
-#         elif hasattr(self.subset, 'samples'):
-#             path = str(self.subset.samples[index][0])
-#         elif hasattr(self.subset, 'data') and isinstance(self.subset.data, list):
-#             path = str(self.subset.data[index])
-#         else:
-#             path = "unknown_path"
-            
-#         return x, y, path
-
-#     def __len__(self):
-#         return len(self.subset)
-
 class DatasetWithPaths(torch.utils.data.Dataset):
     def __init__(self, subset):
         self.subset = subset
-        
-        # forward attributes nếu subset có
+
         if hasattr(subset, "classes"):
             self.classes = subset.classes
         if hasattr(subset, "class_to_idx"):
@@ -275,8 +248,9 @@ class DatasetWithPaths(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.subset)
 
-def filter_dset(dataset, n_img_per_cls, dataset_name):
-    import random
+def filter_dset(dataset, n_img_per_cls, dataset_name, seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
     print(n_img_per_cls)
     if dataset_name == 'pets':
         _images = dataset._images
@@ -301,12 +275,14 @@ def filter_dset(dataset, n_img_per_cls, dataset_name):
         raise ValueError("Please specify valid dataset.")
     new_images = []
     new_labels = []
-    for i in set(_labels):
-        candidates = [j for j in range(len(_labels)) if _labels[j] == i]
-        img_per_cls = min(n_img_per_cls, len(candidates))  # allow for less if not enoug
-        idx = random.sample(range(0, len(candidates)), img_per_cls)
-        new_images.extend([_images[candidates[j]] for j in idx])
-        new_labels.extend([_labels[candidates[j]] for j in idx])
+    sorted_unique_labels = sorted(list(set(_labels)))
+    for i in sorted_unique_labels:
+        candidates = sorted([j for j in range(len(_labels)) if _labels[j] == i])
+        img_per_cls = min(n_img_per_cls, len(candidates))
+        idx_in_candidates = random.sample(range(0, len(candidates)), img_per_cls)
+        idx_in_candidates.sort() 
+        new_images.extend([_images[candidates[j]] for j in idx_in_candidates])
+        new_labels.extend([_labels[candidates[j]] for j in idx_in_candidates])
     if dataset_name == 'pets':
         dataset._images = new_images
         dataset._labels = new_labels
