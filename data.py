@@ -57,7 +57,7 @@ def get_transforms(model_type):
     test_transform = tv.transforms.Compose([
         tv.transforms.Lambda(lambda x: x.convert("RGB")),
         tv.transforms.Resize(
-            256, 
+            224, 
             interpolation=tv.transforms.functional.InterpolationMode.BICUBIC
         ),
         tv.transforms.CenterCrop(224),
