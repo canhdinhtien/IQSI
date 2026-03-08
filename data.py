@@ -692,7 +692,7 @@ def get_data_loader(
             download=False,
         )
     elif dataset == 'dtd':
-        test_dataset = split_dtd(real_train_data_dir, test_transform, 'train')
+        test_dataset = split_dtd(real_train_data_dir, test_transform, 'test')
     elif dataset == 'flowers102':
         test_dataset = split_flowers(real_train_data_dir, test_transform, 'train')
     elif dataset == 'sun397':
