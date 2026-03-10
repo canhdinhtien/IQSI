@@ -22,7 +22,7 @@ from data import get_data_loader, get_synth_train_data_loader
 
 from diffusers import StableDiffusionPipeline, DDIMScheduler
 from models import TinyDecoder, CLIP
-from cluster import get_centroids_from_loader
+from cluster import get_centroids_from_loader_v2
 from data import get_transforms
 
 import torch.nn.functional as F
@@ -209,7 +209,7 @@ def main(argv):
 
     _, clean_transform = get_transforms(config.model_type)
     
-    centroids = get_centroids_from_loader(model, all_real_paths, config.train.num_clusters, clean_transform, config.train.real_batch_size, accelerator, dtype_clip)
+    centroids = get_centroids_from_loader_v2(model, all_real_paths, clean_transform, config.train.real_batch_size, accelerator, dtype_clip)
     centroids_tensor = torch.from_numpy(centroids).to(accelerator.device)
 
     for epoch in range(first_epoch, config.train.num_epochs):
@@ -279,7 +279,7 @@ def main(argv):
         }, step=step)
 
         if (epoch + 1) % config.train.update_centroids_freq == 0:
-            centroids = get_centroids_from_loader(model, all_real_paths, config.train.num_clusters, clean_transform, config.train.real_batch_size, accelerator, dtype_clip)
+            centroids = get_centroids_from_loader_v2(model, all_real_paths, clean_transform, config.train.real_batch_size, accelerator, dtype_clip)
             centroids_tensor = torch.from_numpy(centroids).to(accelerator.device)
         model.train()
 if __name__ == "__main__":
