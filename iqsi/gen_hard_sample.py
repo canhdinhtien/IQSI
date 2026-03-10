@@ -51,7 +51,8 @@ def gen_hard_samples(model, pipe, synth_images_01, synth_labels, real_images, re
         
         pipe.vae.enable_slicing()
 
-    selected_style = REALISTIC_STYLE_POOL[torch.randint(0, len(REALISTIC_STYLE_POOL), (1,), generator=generator).item()]
+    idx = torch.randint(0, len(REALISTIC_STYLE_POOL), (1,)).item()
+    selected_style = REALISTIC_STYLE_POOL[idx]
 
     with torch.no_grad():
         latents, text_embeddings = precompute_assets(pipe, synth_images_01, synth_labels, classes, selected_style, device)
@@ -68,6 +69,7 @@ def gen_hard_samples(model, pipe, synth_images_01, synth_labels, real_images, re
         init_step = int(num_inference_steps * noise_strength)
         t_start = pipe.scheduler.timesteps[-init_step]
         
+        print(f"Generator device: {generator.device}")
         noise = torch.randn(latents.shape, generator=generator, device=device, dtype=latents.dtype)
         latents_t = pipe.scheduler.add_noise(latents, noise, torch.tensor([t_start], device=device))
 
