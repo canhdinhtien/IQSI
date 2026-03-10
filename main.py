@@ -35,6 +35,20 @@ config_flags.DEFINE_config_file("config", "config/config.py", "Training configur
 
 logger = get_logger(__name__)
 
+def flatten_config(config_dict, prefix=''):
+    items = []
+    for k, v in config_dict.items():
+        new_key = f"{prefix}/{k}" if prefix else k
+        if isinstance(v, dict):
+            items.extend(flatten_config(v, new_key).items())
+        else:
+            if v is None:
+                v = "None"
+            elif not isinstance(v, (int, float, str, bool, torch.Tensor)):
+                v = str(v)
+            items.append((new_key, v))
+    return dict(items)
+
 def main(argv):
     del argv
     config = FLAGS.config
@@ -78,9 +92,11 @@ def main(argv):
         if config.log_with == "wandb":
             init_kwargs["wandb"] = {"name": config.run_name}
 
+        flat_config = flatten_config(config.to_dict())
+
         accelerator.init_trackers(
             project_name="IQSI",
-            config=config.to_dict(),
+            config=flat_config, 
             init_kwargs=init_kwargs,
         )
     logger.info(f"\n{config}")
