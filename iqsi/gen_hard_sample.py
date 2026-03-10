@@ -59,45 +59,47 @@ def diffusion_generate(pipe, latents, text_embeddings, noise_strength, generator
         
     return latents_t
 
+
 def gen_hard_samples(model, pipe, synth_images_01, synth_labels, real_images, real_labels, 
                      classes, config, accelerator, centroids_tensor):
     device = accelerator.device
-    alpha = 0.01 
-    generator = torch.Generator(device=device).manual_seed(config.seed)
     num_samples = synth_images_01.shape[0]
+    
+    inner_batch_size = 8 if num_samples >= 8 else num_samples # Reduce if OOM, but training will be slower
+    
+    generator = torch.Generator(device=device).manual_seed(config.seed)
 
     if torch.cuda.is_available():
         pipe.unet.enable_xformers_memory_efficient_attention()
         pipe.vae.enable_slicing()
         pipe.vae.enable_tiling()
 
-    idx = torch.randint(0, len(REALISTIC_STYLE_POOL), (1,)).item()
-    selected_style = REALISTIC_STYLE_POOL[idx]
     with torch.no_grad():
-        latents, text_embeddings = precompute_assets(pipe, synth_images_01, synth_labels, classes, selected_style, device)
+        idx = torch.randint(0, len(REALISTIC_STYLE_POOL), (1,)).item()
+        latents, text_embeddings = precompute_assets(pipe, synth_images_01, synth_labels, classes, REALISTIC_STYLE_POOL[idx], device)
         latents_t = diffusion_generate(pipe, latents, text_embeddings, 0.3, generator, device)
         
         real_out = model(real_images, output_features=True)
         L_real_vec = F.cross_entropy(real_out["logits"], real_labels, reduction="none").detach()
-        real_feats = real_out["image_feats"].detach()
-        real_regions = torch.argmin(torch.cdist(real_feats.float(), centroids_tensor.float()), dim=1).detach()
+        real_regions = torch.argmin(torch.cdist(real_out["image_feats"].float(), centroids_tensor.float()), dim=1).detach()
 
-    del text_embeddings, latents, real_out, real_feats
-    gc.collect()
+    del text_embeddings, latents, real_out
     torch.cuda.empty_cache()
 
     latents_t = latents_t.detach().requires_grad_(True)
+    
+    optimizer = torch.optim.Adam([latents_t], lr=0.01)
     
     mean = torch.tensor([0.481, 0.457, 0.408], device=device).view(1, 3, 1, 1)
     std = torch.tensor([0.268, 0.261, 0.275], device=device).view(1, 3, 1, 1)
 
     for k in range(config.train.opt_steps):
-        if latents_t.grad is not None:
-            latents_t.grad.zero_()
+        optimizer.zero_grad(set_to_none=True)
 
-        for i in range(num_samples):
-            sub_latent = latents_t[i:i+1]
-            sub_label = synth_labels[i:i+1]
+        for i in range(0, num_samples, inner_batch_size):
+            end_idx = min(i + inner_batch_size, num_samples)
+            sub_latent = latents_t[i:end_idx]
+            sub_label = synth_labels[i:end_idx]
 
             with torch.amp.autocast("cuda", dtype=torch.float16):
                 decoded = pipe.vae.decode(sub_latent / pipe.vae.config.scaling_factor).sample
@@ -109,34 +111,35 @@ def gen_hard_samples(model, pipe, synth_images_01, synth_labels, real_images, re
                 out = model(image_trans, output_features=True)
                 s_logits, s_feats = out["logits"], out["image_feats"]
 
-                s_loss = F.cross_entropy(s_logits, sub_label)
+                s_loss_vec = F.cross_entropy(s_logits, sub_label, reduction="none")
+                s_loss = s_loss_vec.mean()
                 
                 dist_s = torch.cdist(s_feats.float(), centroids_tensor.float())
-                s_region = torch.argmin(dist_s, dim=1)
+                s_regions = torch.argmin(dist_s, dim=1)
                 
-                eps_GS_sub = torch.tensor(0.0, device=device)
-                r_mask = (real_regions == s_region)
-                if r_mask.any():
-                    diff = torch.abs(L_real_vec[r_mask] - s_loss)
-                    eps_GS_sub = diff.mean()
+                eps_GS_batch = torch.tensor(0.0, device=device)
+                valid_count = 0
+                for b_idx in range(sub_latent.shape[0]):
+                    r_mask = (real_regions == s_regions[b_idx])
+                    if r_mask.any():
+                        diff = torch.abs(L_real_vec[r_mask] - s_loss_vec[b_idx])
+                        eps_GS_batch += diff.mean()
+                        valid_count += 1
+                
+                if valid_count > 0:
+                    eps_GS_batch /= valid_count
 
-                total_loss = (-config.train.lamda4 * s_loss + config.train.lamda5 * eps_GS_sub) / num_samples
+                total_loss = (-config.train.lamda4 * s_loss + config.train.lamda5 * eps_GS_batch)
+                total_loss = total_loss * (sub_latent.shape[0] / num_samples)
 
             total_loss.backward()
 
-            del decoded, image, image_clip, image_trans, out, s_logits, s_feats, total_loss
-        
-        with torch.no_grad():
-            latents_t.data -= alpha * latents_t.grad.data
-            latents_t.grad.zero_() 
-
-        if k % 2 == 0:
-            torch.cuda.empty_cache()
+        optimizer.step()
 
     with torch.no_grad():
         final_list = []
-        for i in range(num_samples):
-            z = latents_t[i:i+1] / pipe.vae.config.scaling_factor
+        for i in range(0, num_samples, inner_batch_size):
+            z = latents_t[i:i+inner_batch_size] / pipe.vae.config.scaling_factor
             img = pipe.vae.decode(z).sample
             img_resized = F.interpolate(img, size=(224, 224), mode='bilinear', align_corners=False)
             final_list.append((img_resized / 2 + 0.5).clamp(0, 1))
