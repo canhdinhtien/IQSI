@@ -8,7 +8,7 @@ def get_config():
     config.logdir = "logs"
     config.mixed_precision = "bf16"     # "no", "fp16", "bf16"
     config.allow_tf32 = True
-    config.resume_from = ""             
+    config.resume_from = ""
     config.num_checkpoint_limit = 5
     config.dataset_name = "dtd"         
     config.n_shot = 16                  
@@ -40,7 +40,7 @@ def get_config():
     train.num_epochs = 100
     train.num_epochs_warm_up = 20
     train.save_freq = 20
-    train.num_checkpoint_limit = 5     
+    train.num_checkpoint_limit = 5   
     train.use_8bit_adam = False
     train.lr = 1e-4
     train.is_rand_aug = True
@@ -51,15 +51,15 @@ def get_config():
     train.adam_weight_decay = 1e-2
     train.adam_epsilon = 1e-10 # Default is 1e-8
     train.lamda1 = 10
-    train.lamda2 = 10
+    train.lamda2 = 1
     train.lamda3 = 1
     train.lamda4 = 10
     train.lamda5 = 1
     train.num_clusters = 47
     train.update_centroids_freq = 5
-    train.gc_steps = 5
+    train.gc_steps = 1
     train.opt_steps = 10
-    train.prop_hard = 0.4
+    train.prop_hard = 0.5
     train.save_hard_images_freq = 24
     train.save_hard_images = True
 
