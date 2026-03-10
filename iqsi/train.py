@@ -17,7 +17,7 @@ def train_step(
     real_images, real_labels, _ = real_batch
     synth_images, synth_labels, _ = synth_batch
     
-    TS = {i: [[], []] for i in range(config.train.num_clusters)}
+    TS = {i: [[], []] for i in range(config.train.num_clusters * config.n_shot)}
     
     with autocast_context:
         real_images = real_images.to(accelerator.device, dtype=dtype_clip)
@@ -152,7 +152,7 @@ def train_step_with_hard_samples(
     updated_synth_images = synth_images.clone().to(accelerator.device, dtype=dtype_clip)
     updated_synth_images[hard_indices] = hard_samples_aug
 
-    TS = {i: [[], []] for i in range(config.train.num_clusters)}
+    TS = {i: [[], []] for i in range(config.train.num_clusters * config.n_shot)}
 
     with autocast_context:
         real_images = real_images.to(accelerator.device, dtype=dtype_clip)
