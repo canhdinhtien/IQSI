@@ -1,1 +1,1 @@
-from .cluster import get_centroids_from_loader, assign_to_regions
+from .cluster import get_centroids_from_loader, get_centroids_from_loader_v2

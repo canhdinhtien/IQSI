@@ -16,7 +16,7 @@ def get_centroids_from_loader(model, paths, n_clusters, clean_transform, batch_s
                 img = Image.open(p).convert('RGB')
                 batch_tensors.append(clean_transform(img))
             except Exception as e:
-                print(f"Lỗi khi nạp ảnh {p}: {e}")
+                print(f"Error when load image {p}: {e}")
                 continue
         
         if not batch_tensors:
@@ -35,6 +35,28 @@ def get_centroids_from_loader(model, paths, n_clusters, clean_transform, batch_s
 
     return kmeans.centroids
 
-def assign_to_regions(features, centroids):
-    distances = torch.cdist(features.float(), centroids.float(), p=2)
-    return torch.argmin(distances, dim=1)
+@torch.no_grad()
+def get_centroids_from_loader_v2(model, paths, clean_transform, batch_size, accelerator, dtype_clip):
+    all_embeddings = []
+    
+    for i in range(0, len(paths), batch_size):
+        chunk_paths = paths[i : i + batch_size]
+        batch_tensors = []
+        
+        for p in chunk_paths:
+            try:
+                img = Image.open(p).convert('RGB')
+                batch_tensors.append(clean_transform(img))
+            except Exception as e:
+                print(f"Error when load image {p}: {e}")
+                continue
+        
+        if not batch_tensors:
+            continue
+        batch_input = torch.stack(batch_tensors).to(accelerator.device, dtype=dtype_clip)
+        image_feats = model.forward_image(batch_input)
+
+        all_embeddings.append(image_feats.cpu())
+
+    all_embeddings = torch.cat(all_embeddings, dim=0)
+    return all_embeddings.float().numpy()
