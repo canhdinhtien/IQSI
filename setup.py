@@ -30,6 +30,6 @@ setup(
         "transformers",
         "flask",
         "clip @ git+https://github.com/openai/CLIP.git",
-        "xformer"
+        "xformers @ https://download.pytorch.org/whl/cu126/xformers-0.0.29.tar.gz"
     ]
 )
