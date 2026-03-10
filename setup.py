@@ -30,5 +30,6 @@ setup(
         "transformers",
         "flask",
         "clip @ git+https://github.com/openai/CLIP.git",
+        "xformer"
     ]
 )
