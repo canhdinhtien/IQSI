@@ -132,6 +132,8 @@ def train_step_with_hard_samples(
     hard_indices = perm[:num_hard]
     
     images_to_transform = synth_images[hard_indices].to(accelerator.device)
+    labels_to_copy = synth_labels[hard_indices].to(accelerator.device)
+
     images_01 = denormalize_clip(images_to_transform)
     original_samples = images_01.detach().clone()
     hard_samples = gen_hard_samples(
@@ -149,8 +151,24 @@ def train_step_with_hard_samples(
     
     hard_samples_aug = train_transform_tensor(hard_samples).to(accelerator.device, dtype=dtype_clip)
     
-    updated_synth_images = synth_images.clone().to(accelerator.device, dtype=dtype_clip)
-    updated_synth_images[hard_indices] = hard_samples_aug
+    # updated_synth_images = synth_images.clone().to(accelerator.device, dtype=dtype_clip)
+    # updated_synth_images[hard_indices] = hard_samples_aug
+
+    """
+    Instead of replacing the original synth images with hard samples, we concatenate them to the original synth batch.
+    """
+    updated_synth_images = torch.cat([
+        synth_images.to(accelerator.device, dtype=dtype_clip), 
+        hard_samples_aug
+    ], dim=0)
+
+    """
+    Because we are concatenating hard samples to the original synth batch, we also need to concatenate the corresponding labels.
+    """
+    synth_labels = torch.cat([
+        synth_labels.to(accelerator.device), 
+        labels_to_copy
+    ], dim=0)
 
     TS = {i: [[], []] for i in range(config.train.num_clusters * config.n_shot)}
 
