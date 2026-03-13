@@ -54,6 +54,13 @@ def main(argv):
     config = FLAGS.config
     
     unique_id = datetime.datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
+    unique_id = ".".join(map(str, [
+        config.train.lamda1,
+        config.train.lamda2,
+        config.train.lamda3,
+        config.train.lamda4,
+        config.train.lamda5
+    ]))
     if not config.run_name:
         config.run_name = unique_id
     else:
